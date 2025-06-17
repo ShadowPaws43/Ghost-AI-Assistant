@@ -1,0 +1,273 @@
+import speech_recognition as sr
+import pyttsx3
+import webbrowser
+import datetime
+import random
+import tkinter as tk
+from tkinter import messagebox
+from threading import Thread
+import sys
+import time
+from PIL import Image, ImageTk
+
+# Initialize the voice engine
+engine = pyttsx3.init()
+voices = engine.getProperty('voices')
+engine.setProperty('voice', voices[0].id)
+engine.setProperty('rate', 170)
+
+running = True
+
+def speak(text):
+    print(f"Ghost 🔤️: {text}")
+    engine.say(text)
+    engine.runAndWait()
+
+def listen():
+    recognizer = sr.Recognizer()
+    with sr.Microphone() as source:
+        print("🎤 Ghost is listening...")
+        recognizer.pause_threshold = 1
+        audio = recognizer.listen(source)
+
+    try:
+        command = recognizer.recognize_google(audio)
+        print(f"You 🧠: {command}")
+        return command.lower()
+    except sr.UnknownValueError:
+        speak("I didn't catch that. Say it again?")
+        return ""
+    except sr.RequestError:
+        speak("Network issue. Cannot connect to the internet.")
+        return ""
+
+def run_ghost(status_var, ui):
+    global running
+    speak("Ghost is online. How can I assist?")
+    status_var.set("Listening...")
+    ui.speaking = False
+    while running:
+        command = listen()
+
+        if not command:
+            continue
+
+        ui.speaking = True
+
+        if "time" in command:
+            time_str = datetime.datetime.now().strftime('%I:%M %p')
+            speak(f"The time is {time_str}")
+
+        elif "date" in command:
+            date_str = datetime.datetime.now().strftime('%A, %B %d, %Y')
+            speak(f"Today is {date_str}")
+
+        elif "open youtube" in command:
+            webbrowser.open("https://youtube.com")
+            speak("Opening YouTube")
+
+        elif "open google" in command:
+            webbrowser.open("https://google.com")
+            speak("Accessing Google")
+
+        elif "play music" in command:
+            yt_music_url = "https://music.youtube.com/playlist?list=LM"
+            webbrowser.open(yt_music_url)
+            speak("Launching your YouTube Music playlist")
+
+        elif "thank you" in command:
+            speak("Always at your service")
+
+        elif "what's your name" in command or "who are you" in command:
+            speak("I am Ghost. Designed to assist, learn, and adapt.")
+
+        elif "how are you" in command:
+            speak("Running diagnostics... All systems nominal. Let's do this.")
+
+        elif "tell me a joke" in command:
+            jokes = [
+                "Why do programmers prefer dark mode? Because the light attracts bugs.",
+                "Why did the computer get cold? It left its Windows open.",
+                "I would tell you a UDP joke... but you might not get it.",
+                "Debugging: where you fix one bug and create five more."
+            ]
+            speak(random.choice(jokes))
+
+        elif "search for" in command:
+            search_term = command.replace("search for", "").strip()
+            if search_term:
+                speak(f"Searching Google for {search_term}")
+                webbrowser.open(f"https://www.google.com/search?q={search_term}")
+            else:
+                speak("What should I search for?")
+
+        elif "stop" in command or "exit" in command or "goodbye" in command:
+            speak("Ghost going offline. Goodbye.")
+            running = False
+            ui.on_close()
+            break
+
+        else:
+            speak("Command not recognized. Try again.")
+        ui.speaking = False
+    status_var.set("Idle...")
+
+class GhostUI(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Ghost Assistant")
+        self.attributes('-fullscreen', True)
+        self.configure(bg='#000000')
+
+        self.screen_width = self.winfo_screenwidth()
+        self.screen_height = self.winfo_screenheight()
+
+        self.canvas = tk.Canvas(self, width=self.screen_width, height=self.screen_height,
+                                bg='#000000', highlightthickness=0)
+        self.canvas.pack(fill='both', expand=True)
+
+        self.status_var = tk.StringVar(value="Idle...")
+
+        try:
+            self.hud_image = Image.open("futuristic_hud_background.png")
+            self.hud_photo = ImageTk.PhotoImage(self.hud_image.resize((self.screen_width, self.screen_height)))
+            self.canvas.create_image(0, 0, anchor='nw', image=self.hud_photo)
+        except Exception as e:
+            print("HUD background image could not be loaded:", e)
+
+        self.signature = self.canvas.create_text(
+            self.screen_width - 100, self.screen_height - 30, text="BY ABHINAV",
+            fill="#00fff7", font=("Consolas", 14, "bold")
+        )
+
+        self.datetime_label = self.canvas.create_text(self.screen_width//2, 100, text="",
+                                                      font=("Orbitron", 24, "bold"), fill="#00fff7")
+        self.update_datetime()
+
+        self.arc = self.canvas.create_arc(self.screen_width//2 - 100, self.screen_height//2 - 100,
+                                          self.screen_width//2 + 100, self.screen_height//2 + 100,
+                                          start=0, extent=30, style='arc', outline="#00fff7",
+                                          width=3)
+
+        self.radar_rings = []
+        self.radar_radius = 50
+        for i in range(3):
+            ring = self.canvas.create_oval(
+                self.screen_width//2 - self.radar_radius * (i+1),
+                self.screen_height//2 - self.radar_radius * (i+1),
+                self.screen_width//2 + self.radar_radius * (i+1),
+                self.screen_height//2 + self.radar_radius * (i+1),
+                outline="#00fff7", width=2
+            )
+            self.radar_rings.append(ring)
+
+        bar_width = 10
+        bar_spacing = 15
+        bar_count = 20
+        start_x = self.screen_width//2 - (bar_count * bar_spacing) // 2
+        y_base = self.screen_height//2 + 200
+        self.bars = []
+        for i in range(bar_count):
+            bar = self.canvas.create_rectangle(
+                start_x + i * bar_spacing, y_base,
+                start_x + i * bar_spacing + bar_width, y_base - 10,
+                fill="#00fff7", outline=""
+            )
+            self.bars.append(bar)
+
+        self.status_label = tk.Label(self, textvariable=self.status_var,
+                                     font=("Consolas", 14, "italic"), fg="#00fff7", bg='#000000')
+        self.status_label.place(relx=0.5, rely=0.95, anchor='center')
+
+        self.name_text = self.canvas.create_text(self.screen_width//2, self.screen_height//2 + 250,
+                                                 text="ABHINAV", font=("Orbitron", 18, "bold"), fill="#00fff7")
+
+        self.speaking = False
+        self.arc_angle = 0
+        self.glow_phase = 0
+
+        self.animate_arc()
+        self.animate_glow()
+        self.animate_rings()
+        self.animate_bars()
+        self.start_assistant()
+
+    def update_datetime(self):
+        now = datetime.datetime.now().strftime('%A, %B %d, %Y - %I:%M:%S %p')
+        self.canvas.itemconfig(self.datetime_label, text=now)
+        self.after(1000, self.update_datetime)
+
+    def animate_arc(self):
+        if self.speaking:
+            self.arc_angle = (self.arc_angle + 10) % 360
+            glow = f"#00fff{random.randint(5, 9)}"
+            self.canvas.itemconfig(self.arc, start=self.arc_angle, extent=60, outline=glow)
+        else:
+            self.canvas.itemconfig(self.arc, start=0, extent=30, outline="#004455")
+        self.after(100, self.animate_arc)
+
+    def animate_rings(self):
+        for i, ring in enumerate(self.radar_rings):
+            color = "#00fff7" if (self.arc_angle // 10 + i) % 2 == 0 else "#003344"
+            self.canvas.itemconfig(ring, outline=color)
+        self.after(100, self.animate_rings)
+
+    def animate_bars(self):
+        for i, bar in enumerate(self.bars):
+            height = random.randint(10, 60) if self.speaking else 10
+            x0, y1, x1, _ = self.canvas.coords(bar)
+            self.canvas.coords(bar, x0, y1, x1, y1 - height)
+        self.after(100, self.animate_bars)
+
+    def animate_glow(self):
+        glow_color = f"#00fff{random.randint(6, 9)}"
+        self.canvas.itemconfig(self.signature, fill=glow_color)
+        self.after(500, self.animate_glow)
+
+    def start_assistant(self):
+        if not hasattr(self, 'thread') or not self.thread.is_alive():
+            self.status_var.set("Listening...")
+            self.thread = Thread(target=run_ghost, args=(self.status_var, self), daemon=True)
+            self.thread.start()
+
+    def on_close(self):
+        self.quit()
+        self.destroy()
+
+class PasswordScreen(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Enter Password")
+        self.geometry("350x150")
+        self.configure(bg='#0b0f1a')
+        self.resizable(False, False)
+
+        self.label = tk.Label(self, text="Enter Password:", font=("Consolas", 14), fg="#00fff7", bg='#0b0f1a')
+        self.label.pack(pady=(20,5))
+
+        self.password_var = tk.StringVar()
+        self.entry = tk.Entry(self, textvariable=self.password_var, font=("Consolas", 14), show="*", bg='#001122', fg="#00fff7",
+                              insertbackground="#00fff7", relief="flat")
+        self.entry.pack(pady=5)
+        self.entry.focus()
+
+        self.submit_btn = tk.Button(self, text="Submit", font=("Consolas", 12, "bold"), bg='#001122', fg="#00fff7",
+                                    activebackground="#00fff7", activeforeground="#001122", relief="flat",
+                                    command=self.check_password)
+        self.submit_btn.pack(pady=10)
+
+        self.bind('<Return>', lambda event: self.check_password())
+
+    def check_password(self):
+        if self.password_var.get() == "pass":
+            self.destroy()
+            app = GhostUI()
+            app.mainloop()
+        else:
+            messagebox.showerror("Access Denied", "Incorrect Password! The program will now exit.")
+            self.destroy()
+            sys.exit()
+
+if __name__ == "__main__":
+    pw_screen = PasswordScreen()
+    pw_screen.mainloop()
